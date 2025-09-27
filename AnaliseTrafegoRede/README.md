@@ -59,7 +59,3 @@ Falsos Negativos: Um atacante pode usar uma varredura lenta (slow scan), distrib
 
 Limite Fixo: O critério de "mais de 10 portas" é arbitrário. Em ambientes de produção, o valor deve ser ajustado com base no perfil de tráfego normal da rede (baseline).
 
-markdown
-Copiar código
-
-Quer que eu já adicione uma seção **📦 Instalação** com dependências (ex.: Python 3, tcpdump, etc.) para deixar o README mais completo?
