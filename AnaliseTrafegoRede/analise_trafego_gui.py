@@ -1,51 +1,116 @@
+
 import csv
 import re
 from collections import defaultdict
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-def analisar_dados_log(caminho_arquivo):
+# Importar as funções de análise do arquivo analise_trafego.py
+# Para fins de integração, vamos copiar as funções diretamente aqui para evitar problemas de importação em um ambiente de execução simples.
+# Em um projeto maior, seria preferível manter em arquivos separados e usar 'from analise_trafego import parse_line, analyze_traffic, generate_csv_report'
+
+def parse_line(line):
     """
-    Lê um arquivo de log do tcpdump e retorna os dados analisados.
+    Parses a single line from the tcpdump output file.
+    Expected format: '0.000000 10.0.0.5.12345 > 192.168.1.2.80: S ...'
+    Returns (timestamp, source_ip, source_port, dest_ip, dest_port) or None if parsing fails.
+    """
+    match = re.match(r'^(\d+\.\d+)\s+([0-9.]+)\.(\d+)\s+>\s+([0-9.]+)\.(\d+):.*$', line)
+    if match:
+        timestamp = float(match.group(1))
+        source_ip = match.group(2)
+        source_port = int(match.group(3))
+        dest_ip = match.group(4)
+        dest_port = int(match.group(5))
+        return timestamp, source_ip, source_port, dest_ip, dest_port
+    return None
+
+def analyze_traffic(file_path, time_window=60, port_threshold=10):
+    """
+    Analyzes tcpdump traffic log to detect port scans.
 
     Args:
-        caminho_arquivo (str): O caminho para o arquivo de log.
+        file_path (str): Path to the tcpdump log file (trafego.txt).
+        time_window (int): Time window in seconds to consider for port scan detection.
+        port_threshold (int): Number of distinct ports to consider a port scan.
 
     Returns:
-        list: Uma lista de listas contendo os dados do relatório.
-              Retorna None se o arquivo não for encontrado.
+        list: A list of dictionaries, each representing an IP with its analysis.
     """
-    ips_origem = defaultdict(lambda: {'count': 0, 'ports': set()})
+    ip_activity = defaultdict(lambda: {
+        'total_events': 0,
+        'ports_accessed': defaultdict(list), # {port: [timestamp1, timestamp2, ...]}
+        'timestamps': [] # All timestamps for this IP
+    })
 
     try:
-        with open(caminho_arquivo, 'r') as f:
-            for linha in f:
-                partes = linha.split()
-                if len(partes) < 4 or partes[2] != '>':
-                    continue
-
-                try:
-                    ip_origem_full = partes[1]
-                    ip_origem = ip_origem_full.rsplit('.', 1)[0]
-                    porta_destino_full = partes[3]
-                    porta_destino = porta_destino_full.rstrip(':').rsplit('.', 1)[-1]
-                    
-                    if porta_destino.isdigit():
-                        ips_origem[ip_origem]['count'] += 1
-                        ips_origem[ip_origem]['ports'].add(int(porta_destino))
-                except (IndexError, ValueError):
-                    pass
+        with open(file_path, 'r') as f:
+            for line in f:
+                parsed_data = parse_line(line)
+                if parsed_data:
+                    timestamp, source_ip, _, _, dest_port = parsed_data
+                    ip_activity[source_ip]['total_events'] += 1
+                    ip_activity[source_ip]['ports_accessed'][dest_port].append(timestamp)
+                    ip_activity[source_ip]['timestamps'].append(timestamp)
     except FileNotFoundError:
-        messagebox.showerror("Erro", f"O arquivo '{caminho_arquivo}' não foi encontrado.")
-        return None
+        messagebox.showerror("Erro", f"O arquivo '{file_path}' não foi encontrado.")
+        return []
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao ler ou processar o arquivo: {e}")
+        return []
 
-    # Prepara os resultados para serem retornados
-    resultados = []
-    for ip, dados in sorted(ips_origem.items()):
-        port_scan_detectado = "Sim" if len(dados['ports']) > 10 else "Não"
-        resultados.append([ip, dados['count'], port_scan_detectado])
+    results = []
+    for ip, data in ip_activity.items():
+        port_scan_detected = "Não"
+        
+        # Sort timestamps to easily check within a sliding window
+        data['timestamps'].sort()
+
+        # Check for port scan within the time window
+        for i in range(len(data['timestamps'])):
+            start_time = data['timestamps'][i]
+            end_time = start_time + time_window
+            
+            distinct_ports_in_window = set()
+            for port, timestamps_list in data['ports_accessed'].items():
+                for ts in timestamps_list:
+                    if start_time <= ts < end_time:
+                        distinct_ports_in_window.add(port)
+            
+            if len(distinct_ports_in_window) > port_threshold:
+                port_scan_detected = "Sim"
+                break # Found a scan, no need to check further for this IP
+
+        results.append({
+            'IP': ip,
+            'Total_Eventos': data['total_events'],
+            'Detectado_PortScan': port_scan_detected
+        })
     
-    return resultados
+    return results
+
+def generate_csv_report(results, output_file='relatorio.csv'):
+    """
+    Generates a CSV report from the analysis results.
+
+    Args:
+        results (list): List of dictionaries with analysis results.
+        output_file (str): Name of the output CSV file.
+    """
+    if not results:
+        messagebox.showinfo("Aviso", "Nenhum dado para gerar o relatório CSV.")
+        return
+
+    fieldnames = ['IP', 'Total_Eventos', 'Detectado_PortScan']
+    try:
+        with open(output_file, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(results)
+        # print(f"Relatório '{output_file}' gerado com sucesso.") # Não imprimir no console em GUI
+    except IOError as e:
+        messagebox.showerror("Erro", f"Erro ao escrever o arquivo CSV '{output_file}': {e}")
+
 
 class App:
     def __init__(self, root):
@@ -114,29 +179,25 @@ class App:
         for i in self.tree.get_children():
             self.tree.delete(i)
 
-        # Analisa os dados
-        resultados = analisar_dados_log(self.caminho_arquivo_log)
+        # Analisa os dados usando a função aprimorada
+        resultados_dict = analyze_traffic(self.caminho_arquivo_log)
         
-        if resultados is None:
+        if not resultados_dict:
             return
 
         # Popula a tabela com os novos resultados
-        for item in resultados:
-            self.tree.insert('', tk.END, values=item)
+        for item in resultados_dict:
+            self.tree.insert('', tk.END, values=(item['IP'], item['Total_Eventos'], item['Detectado_PortScan']))
 
         # Salva o relatório em CSV
-        self.salvar_csv(resultados)
+        generate_csv_report(resultados_dict)
 
         messagebox.showinfo("Sucesso", "Análise concluída e relatório 'relatorio.csv' foi salvo com sucesso!")
 
-    def salvar_csv(self, dados, arquivo_saida='relatorio.csv'):
-        """Salva os dados analisados em um arquivo CSV."""
-        with open(arquivo_saida, 'w', newline='') as f_csv:
-            writer = csv.writer(f_csv)
-            writer.writerow(['IP', 'Total_Eventos', 'Detectado_PortScan'])
-            writer.writerows(dados)
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = App(root)
     root.mainloop()
+
+
