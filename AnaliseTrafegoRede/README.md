@@ -13,26 +13,27 @@ O processo é dividido em duas etapas principais, ambas executadas no terminal.
 ### 1️⃣ Captura de Tráfego com tcpdump
 
 Primeiro, identifique a interface de rede ativa no seu sistema. Utilize o comando:
-
 ```bash
 ip addr
-
+```
 Procure pela sua interface principal (ex: eth0, enp0s3, wlan0).
 
 Em seguida, execute o tcpdump como superusuário (sudo) para capturar 60 segundos de tráfego de pacotes IP.
 Substitua <interface> pelo nome da sua interface:
-
+```bash
 sudo timeout 60s tcpdump -i <interface> -nn -ttt ip > trafego.txt
-
+```
 Esse comando criará o arquivo trafego.txt, que servirá de entrada para o script de análise.
 
-2️⃣ Análise com o Script Python
+---
+### 2️⃣ Análise com o Script Python
 
 Com o arquivo trafego.txt gerado, execute o script de análise diretamente no terminal:
+```bash
 python3 analise_trafego.py
+```
 
 O script irá:
-
 Ler o arquivo trafego.txt
 
 Processar os dados
@@ -41,7 +42,9 @@ Gerar automaticamente o relatório relatorio.csv no mesmo diretório
 
 Mensagens de progresso serão exibidas no terminal.
 
-📊 Interpretação do relatorio.csv
+--- 
+
+### 📊 Interpretação do relatorio.csv
 
 O arquivo de saída relatorio.csv contém três colunas:
 
