@@ -14,7 +14,7 @@ O processo é dividido em duas etapas principais, ambas executadas no terminal.
 
 Primeiro, identifique a interface de rede ativa no seu sistema. Utilize o comando:
 
-```bash
+
 ip addr
 Procure pela sua interface principal (ex: eth0, enp0s3, wlan0).
 
