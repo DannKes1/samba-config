@@ -1,5 +1,7 @@
 // server.js
 
+// ex .env: SECRET_KEY=uma_chave_secreta_forte_aqui
+
 require("dotenv").config();
 const express = require("express");
 const jwt = require("jsonwebtoken");
@@ -156,3 +158,4 @@ app.post("/logout", (req, res) => {
     return res.status(400).json({ error: "Refresh Token inválido" });
   }
 });
+
